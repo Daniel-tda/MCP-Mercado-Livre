@@ -14,6 +14,7 @@ Endpoints mapeados durante o estudo da documentação:
 """
 
 import os
+from tokenize import group
 import httpx
 
 BASE_URL = "https://api.mercadolibre.com"
@@ -22,7 +23,7 @@ BASE_URL = "https://api.mercadolibre.com"
 class MercadoLivreClient:
     def __init__(self):
         self.access_token = os.getenv("ML_ACCESS_TOKEN")
-        self.seller_id = os.getenv("ML_SELLER_ID")
+        self.seller_id = os.getenv("ML_SELLER_ID", "").strip()
 
         if not self.access_token:
             raise RuntimeError(
@@ -45,7 +46,14 @@ class MercadoLivreClient:
     async def search_orders(
         self, date_from: str | None = None, date_to: str | None = None, status: str | None = None
     ) -> dict:
-        params = {"seller": self.seller_id}
+        
+        seller_id = str(self.seller_id).strip()
+
+        if not seller_id.isdigit():
+            raise ValueError("ML_SELLER_ID deve conter apenas números.")
+
+        params = {"seller": seller_id}
+        
         if status:
             params["order.status"] = status
         # TODO: confirmar na documentação os nomes exatos dos parâmetros de filtro por data
@@ -72,9 +80,28 @@ class MercadoLivreClient:
 
     # --- Faturamento ---
 
-    async def get_billing_periods(self, document_type: str = "BILL") -> dict:
+    
+    async def get_billing_periods(
+        self,
+        group: str = "ML",
+        document_type: str = "BILL",
+    ) -> dict:
+        if group not in {"ML", "MP"}:
+            raise ValueError("group deve ser 'ML' ou 'MP'.")
+
+        if document_type not in {"BILL", "CREDIT_NOTE"}:
+            raise ValueError(
+                "document_type deve ser 'BILL' ou 'CREDIT_NOTE'."
+        )
+
         return await self._get(
-            "/billing/integration/monthly/periods", params={"document_type": document_type}
+            "/billing/integration/monthly/periods",
+            params={
+                "group": group,
+                "document_type": document_type,
+                "offset": 0,
+                "limit": 6,
+            },
         )
 
     async def get_billing_summary(self, period_key: str, group: str = "ML") -> dict:
